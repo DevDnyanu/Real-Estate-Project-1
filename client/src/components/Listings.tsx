@@ -1,31 +1,33 @@
 import { useState, useEffect } from 'react';
-import { PropertyCard } from '@/components/PropertyCard';
+import PropertyCard from '@/components/PropertyCard';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Search, Filter, MapPin } from 'lucide-react';
+import { getListingsApi } from '@/lib/api';
 
 const Listings = () => {
-  const [listings, setListings] = useState([]);
+  const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const BASE = "http://localhost:5000"; 
+  const [searchTerm, setSearchTerm] = useState('');
+
   useEffect(() => {
     const fetchListings = async () => {
       try {
-        const res = await fetch(`${BASE}/api/listings`);
-        const data = await res.json();
+        const data = await getListingsApi();
         
-        console.log('API Response:', data); // Debug 
-        
-        if (data.success === false) {
-          setError(data.message);
-          setLoading(false);
-          return;
+        if (data && data.success && Array.isArray(data.listings)) {
+          setListings(data.listings);
+        } else if (Array.isArray(data)) {
+          setListings(data);
+        } else {
+          setError(data?.message || "Failed to load listings");
+          setListings([]);
         }
-        
-        // यहाँ 'data.listings' use करें क्योंकि backend से यही format आ रहा है
-        setListings(data.listings || data.data || []);
-        setLoading(false);
-      } catch (error) {
-        setError(error.message);
+      } catch (err: any) {
+        setError(err.message);
+        setListings([]);
+      } finally {
         setLoading(false);
       }
     };
@@ -33,46 +35,113 @@ const Listings = () => {
     fetchListings();
   }, []);
 
-  if (loading) return <div className="p-8 text-center">Loading properties...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
+  // Filter listings based on search term
+  const filteredListings = listings.filter(listing =>
+    listing.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    listing.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    listing.type?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) return (
+    <div className="p-8 text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+      <p>Loading properties...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-8 text-center text-red-500">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-w-md mx-auto">
+        <h3 className="text-red-800 font-semibold mb-2">Error</h3>
+        <p>{error}</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="p-3 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-semibold text-center my-7">Property Listings</h1>
-      
-      {!listings || listings.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-500 text-lg">No properties found</p>
-          <p className="text-gray-400">Be the first to create a listing!</p>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Property Listings</h1>
+          <p className="text-gray-600">Find your perfect home</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {listings.map((listing) => (
-            <PropertyCard
-              key={listing._id}
-              property={{
-                id: listing._id,
-                title: listing.name,
-                location: listing.address,
-                price: `₹${listing.regularPrice?.toLocaleString('en-IN')}`,
-                rentPrice: listing.type === 'rent' ? `₹${listing.regularPrice}/month` : undefined,
-                type: listing.type,
-                propertyType: 'Residential',
-                bedrooms: listing.bedrooms,
-                bathrooms: listing.bathrooms,
-                area: '1500',
-                image: listing.images?.[0] || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=500',
-                sellerPackage: 'basic',
-                featured: listing.offer,
-                verified: true,
-              }}
-              onView={() => console.log('View details:', listing._id)}
-              onContact={() => console.log('Contact seller:', listing._id)}
-              onFavorite={() => console.log('Add to favorites:', listing._id)}
-            />
-          ))}
+
+        {/* Search and Filter */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-8">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search by location, property type, or keywords..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button variant="outline" className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Filters
+            </Button>
+          </div>
         </div>
-      )}
+
+        {!filteredListings || filteredListings.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+            <MapPin className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No properties found</h3>
+            <p className="text-gray-600 mb-4">
+              {searchTerm ? `No results for "${searchTerm}"` : 'Be the first to create a listing!'}
+            </p>
+            {searchTerm && (
+              <Button 
+                variant="outline" 
+                onClick={() => setSearchTerm('')}
+                className="mr-2"
+              >
+                Clear Search
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Results count */}
+            <div className="mb-6">
+              <p className="text-gray-600">
+                Showing {filteredListings.length} of {listings.length} properties
+                {searchTerm && ` for "${searchTerm}"`}
+              </p>
+            </div>
+
+            {/* Properties Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredListings.map((listing) => (
+                <PropertyCard
+                  key={listing._id}
+                  property={{
+                    id: listing._id,
+                    title: listing.name,
+                    location: listing.address,
+                    price: `₹${listing.regularPrice?.toLocaleString('en-IN')}`,
+                    rentPrice: listing.type === 'rent' ? `₹${listing.regularPrice}/month` : undefined,
+                    type: listing.type,
+                    propertyType: listing.propertyType || 'Residential',
+                    bedrooms: listing.bedrooms,
+                    bathrooms: listing.bathrooms,
+                    area: listing.squareFootage || listing.area || '0',
+                    image: listing.images?.[0], // This will show the uploaded image
+                    featured: listing.offer,
+                    verified: true,
+                  }}
+                  onView={() => window.location.href = `/listing/${listing._id}`}
+                  onContact={() => console.log('Contact seller:', listing._id)}
+                  onFavorite={() => console.log('Add to favorites:', listing._id)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };

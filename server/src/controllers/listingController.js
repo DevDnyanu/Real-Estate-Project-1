@@ -1,4 +1,13 @@
 import Listing from "../models/Listing.js";
+import mongoose from "mongoose";
+
+// Function to get GridFS bucket
+const getBucket = () => {
+  const db = mongoose.connection.db;
+  return new mongoose.mongo.GridFSBucket(db, {
+    bucketName: "images"
+  });
+};
 
 /** Create listing (TEXT DATA ONLY) */
 export const createListing = async (req, res, next) => {
@@ -6,9 +15,9 @@ export const createListing = async (req, res, next) => {
     const listing = await Listing.create(req.body);
     return res.status(201).json({
       success: true,
-      message: "Listing created",
+      message: "Listing created successfully",
       listingId: listing._id,
-      data: listing,
+      listing,
     });
   } catch (err) {
     next(err);
@@ -19,9 +28,24 @@ export const createListing = async (req, res, next) => {
 export const getListings = async (req, res, next) => {
   try {
     const listings = await Listing.find().sort({ createdAt: -1 });
-    return res.json({ 
-      success: true, 
-      listings // यहाँ 'data' के बजाय 'listings' भेज रहे हैं
+
+    // Add image URLs with safe handling for undefined images
+    const listingsWithImages = listings.map(listing => {
+      const listingObj = listing.toObject();
+      
+      // Safely handle images array - use empty array if undefined
+      const images = Array.isArray(listingObj.images) ? listingObj.images : [];
+      
+      return {
+        ...listingObj,
+        images: images.map(imgId => `${req.protocol}://${req.get("host")}/api/listings/image/${imgId}`)
+      };
+    });
+
+    return res.json({
+      success: true,
+      message: "Listings retrieved successfully",
+      listings: listingsWithImages,
     });
   } catch (err) {
     next(err);
@@ -32,8 +56,27 @@ export const getListings = async (req, res, next) => {
 export const getListing = async (req, res, next) => {
   try {
     const listing = await Listing.findById(req.params.id);
-    if (!listing) return res.status(404).json({ success: false, message: "Not found" });
-    return res.json({ success: true, data: listing });
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: "Listing not found",
+      });
+    }
+
+    // Add image URLs with safe handling
+    const listingObj = listing.toObject();
+    const images = Array.isArray(listingObj.images) ? listingObj.images : [];
+    
+    const listingWithImages = {
+      ...listingObj,
+      images: images.map(imgId => `${req.protocol}://${req.get("host")}/api/listings/image/${imgId}`)
+    };
+
+    return res.json({
+      success: true,
+      message: "Listing retrieved successfully",
+      listing: listingWithImages,
+    });
   } catch (err) {
     next(err);
   }
@@ -47,8 +90,19 @@ export const updateListing = async (req, res, next) => {
       req.body,
       { new: true, runValidators: true }
     );
-    if (!updatedListing) return res.status(404).json({ success: false, message: "Not found" });
-    return res.json({ success: true, message: "Updated", data: updatedListing });
+
+    if (!updatedListing) {
+      return res.status(404).json({
+        success: false,
+        message: "Listing not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Listing updated successfully",
+      listing: updatedListing,
+    });
   } catch (err) {
     next(err);
   }
@@ -57,36 +111,175 @@ export const updateListing = async (req, res, next) => {
 /** Delete listing */
 export const deleteListing = async (req, res, next) => {
   try {
-    const deletedListing = await Listing.findByIdAndDelete(req.params.id);
-    if (!deletedListing) return res.status(404).json({ success: false, message: "Not found" });
-    return res.json({ success: true, message: "Deleted" });
+    const listing = await Listing.findById(req.params.id);
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: "Listing not found",
+      });
+    }
+    
+    // Safely handle images array
+    const images = Array.isArray(listing.images) ? listing.images : [];
+    
+    // Delete associated images from GridFS
+    if (images.length > 0) {
+      const bucket = getBucket();
+      for (const imageId of images) {
+        try {
+          await bucket.delete(new mongoose.Types.ObjectId(imageId));
+        } catch (deleteError) {
+          console.error(`Error deleting image ${imageId}:`, deleteError);
+          // Continue with other images even if one fails
+        }
+      }
+    }
+    
+    // Delete the listing
+    await Listing.findByIdAndDelete(req.params.id);
+    
+    return res.json({
+      success: true,
+      message: "Listing deleted successfully",
+    });
   } catch (err) {
     next(err);
   }
 };
 
-/** ================= IMAGE UPLOAD (COMMENTED FOR NOW) ================= */
-// import path from "path";
-// import { fileURLToPath } from "url";
-// const __filename = fileURLToPath(import.meta.url);
-// const __dirname = path.dirname(__filename);
+/** Upload images to MongoDB GridFS */
+export const uploadImages = async (req, res, next) => {
+  try {
+    const { listingId } = req.params;
 
-// // Save image URLs into document after upload
-// export const uploadImages = async (req, res, next) => {
-//   try {
-//     const { listingId } = req.body;
-//     if (!listingId) return res.status(400).json({ success: false, message: "listingId required" });
-//     if (!req.files || req.files.length === 0) {
-//       return res.status(400).json({ success: false, message: "No files uploaded" });
-//     }
-//     const imageUrls = req.files.map(f => `/uploads/${path.basename(f.path)}`);
-//     const updated = await Listing.findByIdAndUpdate(
-//       listingId,
-//       { $push: { images: { $each: imageUrls } } },
-//       { new: true }
-//     );
-//     return res.json({ success: true, message: "Images added", data: updated });
-//   } catch (err) {
-//     next(err);
-//   }
-// };
+    if (!listingId) {
+      return res.status(400).json({
+        success: false,
+        message: "listingId is required",
+      });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No files uploaded",
+      });
+    }
+
+    // Get file IDs from uploaded files
+    const fileIds = req.files.map(file => file.id);
+
+    // Update listing with image IDs (not URLs)
+    const updatedListing = await Listing.findByIdAndUpdate(
+      listingId,
+      { $push: { images: { $each: fileIds } } },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedListing) {
+      return res.status(404).json({
+        success: false,
+        message: "Listing not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Images uploaded successfully",
+      fileIds: fileIds,
+      listing: updatedListing,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** Delete images from MongoDB GridFS */
+export const deleteImages = async (req, res, next) => {
+  try {
+    const { listingId } = req.params;
+    const { imageIds } = req.body;
+
+    if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Image IDs array is required",
+      });
+    }
+
+    // Delete files from GridFS
+    const bucket = getBucket();
+    for (const imageId of imageIds) {
+      try {
+        await bucket.delete(new mongoose.Types.ObjectId(imageId));
+      } catch (deleteError) {
+        console.error(`Error deleting image ${imageId}:`, deleteError);
+        // Continue with other images
+      }
+    }
+
+    // Remove image references from listing
+    const updatedListing = await Listing.findByIdAndUpdate(
+      listingId,
+      { $pull: { images: { $in: imageIds } } },
+      { new: true }
+    );
+
+    if (!updatedListing) {
+      return res.status(404).json({
+        success: false,
+        message: "Listing not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Images deleted successfully",
+      listing: updatedListing,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** Get image from MongoDB GridFS */
+export const getImage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: "Image ID is required" });
+    }
+    
+    const bucket = getBucket();
+    
+    // Find the file to get its content type
+    const files = await bucket.find({ _id: new mongoose.Types.ObjectId(id) }).toArray();
+    if (!files || files.length === 0) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+    
+    // Set proper content type header
+    res.set('Content-Type', files[0].contentType || 'image/jpeg');
+    
+    // Stream the image to the response
+    const downloadStream = bucket.openDownloadStream(new mongoose.Types.ObjectId(id));
+    
+    downloadStream.on("data", (chunk) => {
+      res.write(chunk);
+    });
+    
+    downloadStream.on("error", (err) => {
+      if (!res.headersSent) {
+        res.status(404).json({ message: "Image not found" });
+      }
+    });
+    
+    downloadStream.on("end", () => {
+      res.end();
+    });
+  } catch (error) {
+    console.error("Error fetching image:", error);
+    res.status(500).json({ message: "Error fetching image" });
+  }
+};

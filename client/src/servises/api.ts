@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+// Use environment variable for API base URL
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
 
 // Create axios instance
 const api = axios.create({
@@ -37,6 +38,10 @@ export const authAPI = {
   signup: (userData: any) => api.post('/auth/signup', userData),
   login: (credentials: any) => api.post('/auth/login', credentials),
   getProfile: () => api.get('/auth/me'),
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token: string, newPassword: string) => 
+    api.post('/auth/reset-password', { token, newPassword }),
+  verifyOtp: (email: string, otp: string) => api.post('/auth/verify-otp', { email, otp }),
 };
 
 // Listings API

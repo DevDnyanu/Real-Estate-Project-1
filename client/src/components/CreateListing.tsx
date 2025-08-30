@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,9 +31,9 @@ const CreateListing = () => {
     type: '',
     bedrooms: 1,
     bathrooms: 1,
-    squareFootage: 500, // Minimum 500 sq ft
+    squareFootage: 500,
     contactNumber: '',
-    regularPrice: 1000000, // Start at 10 lakh
+    regularPrice: 1000000,
     discountPrice: 0,
     offer: false,
     parking: false,
@@ -247,10 +247,22 @@ const CreateListing = () => {
 
   // Upload images after text data is submitted
   const uploadImages = async () => {
-    if (!listingId) return;
+     if (!listingId || files.length === 0) {
+    console.log("Skipping upload: listingId or files missing");
+    return; // <-- Prevents accidental call with no data
+  }
     
     try {
       setUploading(true);
+      setImageUploadError('');
+      
+      // Validate images before upload
+      const imageError = validateImages(files);
+      if (imageError) {
+        setImageUploadError(imageError);
+        return;
+      }
+      
       await uploadImagesApi(listingId, files);
       
       toast({ 
@@ -259,7 +271,7 @@ const CreateListing = () => {
         variant: 'default'
       });
       
-      navigate(`/listing/${listingId}`);
+      navigate('/');
     } catch (e: any) {
       console.error('Error uploading images:', e);
       setImageUploadError(e.message || 'Failed to upload images');
@@ -267,6 +279,7 @@ const CreateListing = () => {
       setUploading(false);
     }
   };
+
 
   // Validate entire form before submission
   const validateForm = () => {

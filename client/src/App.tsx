@@ -6,7 +6,7 @@ import RouterComponent from './components/Router';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 
-// Add TypeScript interfaces
+
 interface User {
   token: string;
   role: string;
@@ -68,6 +68,7 @@ function App() {
           onLogin={handleLogin}
           onLogout={handleLogout}
         />
+        
         
         <Toaster />
       </div>

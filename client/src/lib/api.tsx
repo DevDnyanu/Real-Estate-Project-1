@@ -1,4 +1,4 @@
-const BASE = "http://localhost:5000"; // backend
+const BASE = "http://localhost:5000";
 
 const authHeaders = () => {
   const token = localStorage.getItem("token");
@@ -6,14 +6,22 @@ const authHeaders = () => {
 };
 
 const parseJson = async (res) => {
-  // Avoid "Unexpected end of JSON input" if server returns empty body
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return res.json();
-  return { success: res.ok }; // fallback
+  const text = await res.text();
+  if (!text) {
+    return { success: res.ok };
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("JSON parse error:", e, "Response text:", text);
+    return { success: false, message: "Invalid JSON response" };
+  }
 };
 
+// Create listing
 export const createListingApi = async (payload) => {
-  const res = await fetch(`${BASE}/api/listings/create`, {
+  const res = await fetch(`${BASE}/api/listings`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),
@@ -23,35 +31,48 @@ export const createListingApi = async (payload) => {
   return data;
 };
 
-export const uploadImagesApi = async (listingId, files) => {
-  const fd = new FormData();
-  fd.append("listingId", listingId);
-  [...files].forEach((f) => fd.append("images", f));
-
-  const res = await fetch(`${BASE}/api/listings/upload-images`, {
-    method: "POST",
-    headers: { ...authHeaders() }, // important: don't set Content-Type manually
-    body: fd,
+// Upload images
+export const uploadImagesApi = async (listingId: string, files: File[]) => {
+  const formData = new FormData();
+  files.forEach((file: File) => {
+    formData.append("images", file);
   });
+
+  const res = await fetch(`${BASE}/api/listings/${listingId}/upload-images`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+  
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.message || "Image upload failed");
   return data;
 };
 
-// export const getListingsApi = async () => {
-//   const res = await fetch(`${BASE}/api/listings`);
-//   const data = await parseJson(res);
-//   if (!res.ok) throw new Error(data.message || "Failed to fetch listings");
-//   return data;
-// };
-
+// Get single listing
 export const getListingApi = async (id) => {
-  const res = await fetch(`${BASE}/api/listings/${id}`);
-  const data = await parseJson(res);
-  if (!res.ok) throw new Error(data.message || "Failed to fetch listing");
-  return data;
+  try {
+    const res = await fetch(`${BASE}/api/listings/${id}`);
+    const data = await parseJson(res);
+    
+    if (!res.ok) {
+      throw new Error(data.message || `Failed to fetch listing: ${res.status}`);
+    }
+    
+    if (data && data.listing) {
+      return data.listing;
+    } else if (data && data.data) {
+      return data.data;
+    } else {
+      return data;
+    }
+  } catch (error) {
+    console.error('Error fetching listing:', error);
+    throw error;
+  }
 };
 
+// Update listing
 export const updateListingApi = async (id, payload) => {
   const res = await fetch(`${BASE}/api/listings/${id}`, {
     method: "PUT",
@@ -63,6 +84,7 @@ export const updateListingApi = async (id, payload) => {
   return data;
 };
 
+// Delete listing
 export const deleteListingApi = async (id) => {
   const res = await fetch(`${BASE}/api/listings/${id}`, {
     method: "DELETE",
@@ -72,27 +94,25 @@ export const deleteListingApi = async (id) => {
   if (!res.ok) throw new Error(data.message || "Failed to delete listing");
   return data;
 };
-// lib/api.js
+
+// Get all listings
 export const getListingsApi = async () => {
   try {
-    const response = await fetch(`  ${BASE}/api/listings`);
+    const res = await fetch(`${BASE}/api/listings`);
+    const data = await parseJson(res);
     
-    if (!response.ok) {
-      
-      throw new Error(`Failed to fetch listings: ${response.status}`);
+    if (!res.ok) {
+      throw new Error(data.message || `Failed to fetch listings: ${res.status}`);
     }
     
-    const data = await response.json();
-    console.log("data",data)
-    // Different response formats handle करें
-    if (data && data.success !== undefined) {
-      return data; // {success: true, listings: []}
+    if (data && data.listings) {
+      return { success: true, listings: data.listings };
     } else if (Array.isArray(data)) {
-      return { success: true, listings: data }; // Direct array
+      return { success: true, listings: data };
     } else if (data && data.data) {
-      return { success: true, listings: data.data }; // {data: []}
+      return { success: true, listings: data.data };
     } else {
-      return { success: false, message: "Invalid response format" };
+      return { success: false, message: "Invalid response format", listings: [] };
     }
   } catch (error) {
     console.error('Error fetching listings:', error);

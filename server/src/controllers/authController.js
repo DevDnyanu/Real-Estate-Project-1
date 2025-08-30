@@ -1,114 +1,77 @@
-import bcrypt from "bcrypt";
+// server/src/controllers/authController.js
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
-import UserModel from "../models/user.js"; // using .js because this is JS/ESM
+import UserModel from "../models/user.js";
+import { sendOTPEmail } from "../utils/email.js";
 
-// Generate OTP
-const generateOTP = () =>
-  Math.floor(100000 + Math.random() * 900000).toString();
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+const createToken = (payload, expiresIn = "24h") => {
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+};
 
 // Signup
-const signup = async (req, res) => {
+export const signup = async (req, res) => {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    const { name, email, password, phone, role } = req.body;
 
-    if (!name || !email || !password || !confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "All fields are required", success: false });
-    }
-
-    if (password !== confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "Passwords do not match", success: false });
-    }
-
-    const existingUser = await UserModel.findOne({ email });
+    // Check if user already exists by email or phone
+    const existingUser = await UserModel.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
-      return res
-        .status(409)
-        .json({ message: "User already exists", success: false });
+      return res.status(409).json({ message: "User already exists, you can log in", success: false });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
-
-    const newUser = new UserModel({ name, email, password: hashed });
+    const newUser = new UserModel({ name, email, phone, password, role });
     await newUser.save();
 
-    res.status(201).json({ message: "Signup successful", success: true });
+    // Build response payload (no password)
+    const payloadUser = { id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role };
+
+    res.status(201).json({
+      message: "Signup successful",
+      success: true,
+      data: { user: payloadUser },
+    });
   } catch (err) {
     console.error("Signup error:", err);
-    res
-      .status(500)
-      .json({ message: "Internal server error", success: false });
+    res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
 // Login
-const login = async (req, res) => {
+export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log("Login Request:", req.body);
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required", success: false });
-    }
-
-    // Ensure your User schema sets password { select: false } if you keep .select("+password")
     const user = await UserModel.findOne({ email }).select("+password");
-    if (!user) {
-      return res
-        .status(403)
-        .json({ message: "User not found", success: false });
-    }
+    if (!user) return res.status(403).json({ message: "User not found", success: false });
 
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    const isPasswordCorrect = await user.comparePassword(password);
     if (!isPasswordCorrect) {
-      return res
-        .status(403)
-        .json({ message: "Invalid password", success: false });
+      return res.status(403).json({ message: "Invalid password", success: false });
     }
 
-    const token = jwt.sign(
-      { email: user.email, _id: user._id },
-      process.env.JWT_SECRET || "fallback_secret",
-      { expiresIn: "24h" }
-    );
+    const token = createToken({ email: user.email, _id: user._id }, "24h");
 
+    // send token + user inside data
     res.status(200).json({
       message: "Login successful",
       success: true,
-      token,
-      name: user.name,
-      email: user.email,
+      data: { token, user: { id: user._id, name: user.name, email: user.email, role: user.role } },
     });
   } catch (err) {
     console.error("Login error:", err);
-    res
-      .status(500)
-      .json({ message: "Internal server error", success: false });
+    res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
-// Forgot Password - Generate OTP
-const forgotPassword = async (req, res) => {
-  const { email } = req.body;
-
+// Forgot Password
+export const forgotPassword = async (req, res) => {
   try {
-    if (!email) {
-      return res
-        .status(400)
-        .json({ message: "Email is required", success: false });
-    }
-
+    const { email } = req.body;
     const user = await UserModel.findOne({ email });
-    if (!user) {
-      return res
-        .status(404)
-        .json({ message: "User not found", success: false });
-    }
+    if (!user) return res.status(404).json({ message: "User not found", success: false });
 
     const otp = generateOTP();
     const hashedOTP = await bcrypt.hash(otp, 10);
@@ -116,109 +79,74 @@ const forgotPassword = async (req, res) => {
     user.otpExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
+    const result = await sendOTPEmail(email, otp);
+    if (!result.success) {
+      return res.status(500).json({ message: "Failed to send OTP", success: false });
+    }
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "Password Reset Request",
-      text: `Your OTP for password reset is: ${otp}. It expires in 1 hour.`,
-    });
-
-    res.status(200).json({ message: "OTP sent to email", success: true });
+    return res.status(200).json({ message: "OTP sent to email", success: true });
   } catch (err) {
-    console.error("Forgot password error:", err);
-    res
-      .status(500)
-      .json({ message: "Internal server error", success: false });
+    console.error("Forgot Password error:", err);
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
 // Verify OTP
-const verifyOtp = async (req, res) => {
-  const { email, otp } = req.body;
-
+export const verifyOtp = async (req, res) => {
   try {
-    if (!email || !otp) {
-      return res
-        .status(400)
-        .json({ message: "Email and OTP are required", success: false });
-    }
-
+    const { email, otp } = req.body;
     const user = await UserModel.findOne({ email });
-
     if (!user || !user.otp || !user.otpExpires || user.otpExpires < Date.now()) {
-      return res
-        .status(400)
-        .json({ message: "Invalid or expired OTP", success: false });
+      return res.status(400).json({ message: "Invalid or expired OTP", success: false });
     }
 
     const isOtpValid = await bcrypt.compare(otp, user.otp);
-    if (!isOtpValid) {
-      return res.status(400).json({ message: "Invalid OTP", success: false });
-    }
+    if (!isOtpValid) return res.status(400).json({ message: "Invalid OTP", success: false });
 
-    const resetToken = jwt.sign(
-      { email },
-      process.env.JWT_SECRET || "fallback_secret",
-      { expiresIn: "15m" }
-    );
+    // Create short-lived reset token
+    const resetToken = createToken({ email }, "15m");
 
-    res.status(200).json({ message: "OTP verified", success: true, resetToken });
+    // Return as data so frontend can read response.data.data.resetToken
+    return res.status(200).json({
+      message: "OTP verified",
+      success: true,
+      data: { resetToken },
+    });
   } catch (err) {
     console.error("Verify OTP error:", err);
-    res
-      .status(500)
-      .json({ message: "Internal server error", success: false });
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
 
 // Reset Password
-const resetPassword = async (req, res) => {
-  const { email, resetToken, newPassword } = req.body;
-
+export const resetPassword = async (req, res) => {
   try {
+    const { email, resetToken, newPassword } = req.body;
     if (!email || !resetToken || !newPassword) {
-      return res.status(400).json({
-        message: "Email, resetToken and newPassword are required",
-        success: false,
-      });
+      return res.status(400).json({ message: "Missing required fields", success: false });
     }
 
-    const decoded = jwt.verify(
-      resetToken,
-      process.env.JWT_SECRET || "fallback_secret"
-    );
-
-    if (!decoded || decoded.email !== email) {
-      return res.status(400).json({ message: "Invalid token", success: false });
+    // verify token
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid or expired token", success: false });
     }
+
+    if (decoded.email !== email) return res.status(400).json({ message: "Invalid token", success: false });
 
     const user = await UserModel.findOne({ email }).select("+password");
-    if (!user) {
-      return res
-        .status(400)
-        .json({ message: "User not found", success: false });
-    }
+    if (!user) return res.status(400).json({ message: "User not found", success: false });
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = await bcrypt.hash(newPassword, 12);
     user.otp = undefined;
     user.otpExpires = undefined;
     await user.save();
 
-    res
-      .status(200)
-      .json({ message: "Password reset successfully", success: true });
+    return res.status(200).json({ message: "Password reset successfully", success: true });
   } catch (err) {
-    console.error("Reset password error:", err);
-    res.status(500).json({
-      message: "Invalid or expired token",
-      success: false,
-    });
+    console.error("Reset Password error:", err);
+    return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
-
-export { signup, login, forgotPassword, verifyOtp, resetPassword };

@@ -1,25 +1,35 @@
-// Router.js
+// Router.tsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Home from './Home'
+import Home from './Home';
 import Login from './Login';
 import SignUpPage from './Signup';
 import CreateListing from './CreateListing';
 import Listings from './Listings';
 import EditListing from './EditListing';
 import ListingsPage from './ListingsPage';
-// import Index from '../pages/Index';
+import ListingDetailsPage from './ListingDetailsPage';
+
+// import ForgotPassword from './ForgotPassword';
+// import VerifyOTP from './VerifyOtp';
+// import ResetPassword from './resetPassword';
 
 
-const Router = ({ isAuthenticated, userRole, onLogin, onLogout }) => {
+interface RouterProps {
+  isAuthenticated: boolean;
+  userRole: string;
+  onLogin: (token: string, role: string) => void;
+  onLogout: () => void;
+}
+
+const Router: React.FC<RouterProps> = ({ isAuthenticated, userRole, onLogin, onLogout }) => {
   return (
     <Routes>
       {/* Public Routes */}
-      {/* <Route path="/" element={<Index />} /> */}
-     <Route
-  path="/"
-  element={<Home currentLang="en" onLogout={onLogout} />}
-/>
+      <Route
+        path="/"
+        element={<Home currentLang="en" onLogout={onLogout} />}
+      />
 
       <Route 
         path="/login" 
@@ -38,6 +48,21 @@ const Router = ({ isAuthenticated, userRole, onLogin, onLogout }) => {
             <Navigate to={userRole === 'seller' ? '/updatelisting' : '/'} />
         } 
       />
+      
+      {/* <Route 
+        path="/forgot-password" 
+        element={<ForgotPassword />} 
+      />
+      
+      <Route 
+        path="/verify-otp" 
+        element={<VerifyOTP />} 
+      />
+      
+      <Route 
+        path="/reset-password" 
+        element={<ResetPassword />} 
+      /> */}
       
       {/* Protected Routes */}
       <Route 
@@ -66,13 +91,12 @@ const Router = ({ isAuthenticated, userRole, onLogin, onLogout }) => {
             <Navigate to="/login" />
         } 
       />
-      
+      <Route path="/listing/:id" element={<ListingDetailsPage />} />
       {/* Listings page (public) */}
       <Route path="/properties" element={<Listings />} />
       
       {/* Catch all route */}
       <Route path="*" element={<Navigate to="/" />} />
-      
     </Routes>
   );
 };

@@ -86,15 +86,11 @@ const listingSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    images: {
-      type: [String],
-      default: []
-    },
-    userRef: {
-      type: String,
-      required: true
-    }
-  },
+     images: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "images.files" // Reference to GridFS files
+  }]
+},
   { timestamps: true }
 );
 
