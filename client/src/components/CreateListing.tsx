@@ -1,9 +1,9 @@
+// components/CreateListing.tsx
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { createListingApi, uploadImagesApi } from '@/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -19,8 +19,12 @@ import {
   AlertCircle,
   Upload,
   Phone,
-  Ruler
+  Ruler,
+  X,
+  Edit3,
+  ImageIcon
 } from 'lucide-react';
+import { createListingApi, uploadImagesApi } from '@/lib/api';
 
 const CreateListing = () => {
   const [files, setFiles] = useState<File[]>([]);
@@ -228,35 +232,68 @@ const CreateListing = () => {
     });
   };
 
-  // Handle image upload
+  // Handle image upload with preview
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles) return;
     
     const filesArray = Array.from(selectedFiles);
-    const imageError = validateImages(filesArray);
+    const newFiles = [...files, ...filesArray].slice(0, 6); // Limit to 6 images
     
+    const imageError = validateImages(newFiles);
     if (imageError) {
       setImageUploadError(imageError);
       return;
     }
     
-    setFiles(filesArray);
+    setFiles(newFiles);
     setImageUploadError('');
+  };
+
+  // Remove specific image
+  const removeImage = (index: number) => {
+    const newFiles = files.filter((_, i) => i !== index);
+    setFiles(newFiles);
+    setImageUploadError('');
+  };
+
+  // Replace specific image
+  const replaceImage = (index: number) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+          setImageUploadError('Image should be less than 5MB');
+          return;
+        }
+        if (!file.type.startsWith('image/')) {
+          setImageUploadError('Only image files are allowed');
+          return;
+        }
+        
+        const newFiles = [...files];
+        newFiles[index] = file;
+        setFiles(newFiles);
+        setImageUploadError('');
+      }
+    };
+    input.click();
   };
 
   // Upload images after text data is submitted
   const uploadImages = async () => {
-     if (!listingId || files.length === 0) {
-    console.log("Skipping upload: listingId or files missing");
-    return; // <-- Prevents accidental call with no data
-  }
+    if (!listingId || files.length === 0) {
+      setImageUploadError('Please select at least one image');
+      return;
+    }
     
     try {
       setUploading(true);
       setImageUploadError('');
       
-      // Validate images before upload
       const imageError = validateImages(files);
       if (imageError) {
         setImageUploadError(imageError);
@@ -267,7 +304,7 @@ const CreateListing = () => {
       
       toast({ 
         title: 'Success', 
-        description: 'Images uploaded successfully!',
+        description: 'Listing created with images successfully!',
         variant: 'default'
       });
       
@@ -279,7 +316,6 @@ const CreateListing = () => {
       setUploading(false);
     }
   };
-
 
   // Validate entire form before submission
   const validateForm = () => {
@@ -294,11 +330,10 @@ const CreateListing = () => {
       contactNumber: validateContactNumber(formData.contactNumber),
       regularPrice: validatePrice(formData.regularPrice),
       discountPrice: formData.offer ? validateDiscountPrice(formData.discountPrice, formData.regularPrice) : '',
-      images: '' // Will be validated separately
+      images: ''
     };
     
     setErrors(newErrors);
-    
     return !Object.values(newErrors).some(error => error !== '');
   };
 
@@ -862,18 +897,19 @@ const CreateListing = () => {
             </Card>
           </form>
         ) : (
-          /* Image Upload Section (visible after text data is submitted) */
-          <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm max-w-2xl mx-auto">
+          /* Image Upload Section with Enhanced Preview and Edit */
+          <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm max-w-4xl mx-auto">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Upload className="h-4 w-4 text-blue-600" />
-                Upload Property Images
+                Upload Property Images ({files.length}/6)
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Image Upload Input */}
               <div className="space-y-2">
                 <Label htmlFor="images" className="text-sm font-medium text-gray-700">
-                  Select Images (Max 6) <span className="text-red-500">*</span>
+                  Select Images (Maximum 6) <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="images"
@@ -882,9 +918,10 @@ const CreateListing = () => {
                   accept="image/*"
                   onChange={handleImageChange}
                   className="h-9 text-sm"
+                  disabled={files.length >= 6}
                 />
                 <p className="text-xs text-gray-500">
-                  Upload up to 6 images of your property (each under 5MB)
+                  Upload up to 6 images of your property (each under 5MB). Click edit button to replace individual images.
                 </p>
                 
                 {imageUploadError && (
@@ -893,44 +930,100 @@ const CreateListing = () => {
                     {imageUploadError}
                   </p>
                 )}
-                
-                {files.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-green-600 font-medium">
-                      {files.length} file(s) selected
-                    </p>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      {Array.from(files).map((file, index) => (
-                        <div key={index} className="relative">
+              </div>
+
+              {/* Image Preview Grid with Edit Options */}
+              {files.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" />
+                    Selected Images Preview
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {files.map((file, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-video w-full rounded-lg overflow-hidden border-2 border-gray-200">
                           <img
                             src={URL.createObjectURL(file)}
                             alt={`Preview ${index + 1}`}
-                            className="w-full h-20 object-cover rounded-md"
+                            className="w-full h-full object-cover"
                           />
-                          <span className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
-                            {index + 1}
-                          </span>
                         </div>
-                      ))}
-                    </div>
+                        
+                        {/* Image Number Badge */}
+                        <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          {index + 1}
+                        </div>
+                        
+                        {/* Edit and Remove Buttons (appear on hover) */}
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 w-8 p-0 bg-white/90 hover:bg-white"
+                            onClick={() => replaceImage(index)}
+                            title="Replace image"
+                          >
+                            <Edit3 className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="h-8 w-8 p-0 bg-red-500/90 hover:bg-red-500"
+                            onClick={() => removeImage(index)}
+                            title="Remove image"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        
+                        {/* Image Info */}
+                        <div className="mt-2 text-center">
+                          <p className="text-xs text-gray-600 truncate">
+                            {file.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(file.size / 1024 / 1024).toFixed(1)} MB
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Add More Images Placeholder */}
+                    {files.length < 6 && (
+                      <div 
+                        className="aspect-video w-full rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                        onClick={() => document.getElementById('images')?.click()}
+                      >
+                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-600 font-medium">Add More</p>
+                        <p className="text-xs text-gray-500">{6 - files.length} remaining</p>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
               
-              <div className="flex gap-2">
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
                 <Button
                   type="button"
                   onClick={uploadImages}
                   disabled={uploading || files.length === 0}
-                  className="flex-1 h-10 text-sm font-medium bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+                  className="flex-1 h-11 text-sm font-medium bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
                 >
                   {uploading ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Uploading...
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Uploading Images...
                     </div>
                   ) : (
-                    'Upload Images'
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload {files.length} Image{files.length !== 1 ? 's' : ''}
+                    </>
                   )}
                 </Button>
                 
@@ -938,7 +1031,7 @@ const CreateListing = () => {
                   type="button"
                   variant="outline"
                   onClick={() => navigate(`/listing/${listingId}`)}
-                  className="h-10 text-sm"
+                  className="h-11 text-sm px-6"
                 >
                   Skip for Now
                 </Button>

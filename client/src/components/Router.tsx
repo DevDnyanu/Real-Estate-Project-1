@@ -1,4 +1,4 @@
-// Router.tsx
+// components/Router.tsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Home from './Home';
@@ -9,92 +9,135 @@ import Listings from './Listings';
 import EditListing from './EditListing';
 import ListingsPage from './ListingsPage';
 import ListingDetailsPage from './ListingDetailsPage';
-
-// import ForgotPassword from './ForgotPassword';
-// import VerifyOTP from './VerifyOtp';
-// import ResetPassword from './resetPassword';
-
+import Profile from './Profile';
 
 interface RouterProps {
   isAuthenticated: boolean;
   userRole: string;
-  onLogin: (token: string, role: string) => void;
+  onLogin: (token: string, role: string, userId: string) => void;
   onLogout: () => void;
+  currentLang: "en" | "hi";
 }
 
-const Router: React.FC<RouterProps> = ({ isAuthenticated, userRole, onLogin, onLogout }) => {
+const Router: React.FC<RouterProps> = ({ 
+  isAuthenticated, 
+  userRole, 
+  onLogin, 
+  onLogout,
+  currentLang 
+}) => {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route 
+        path="/" 
+        element={
+          <Home 
+            currentLang={currentLang}
+            onLogout={onLogout} 
+            userRole={userRole}
+            isAuthenticated={isAuthenticated}
+          />
+        } 
+      />
+      
+      <Route 
+        path="/properties" 
+        element={
+          isAuthenticated ? (
+            <Listings />
+          ) : (
+            <Navigate to="/login?redirect=/properties" />
+          )
+        } 
+      />
+      
+      <Route 
+        path="/listing/:id" 
+        element={
+          isAuthenticated ? (
+            <ListingDetailsPage />
+          ) : (
+            <Navigate to="/login?redirect=/listing/:id" />
+          )
+        } 
+      />
+
+      {/* Auth Routes */}
       <Route
-        path="/"
-        element={<Home currentLang="en" onLogout={onLogout} />}
+        path="/login"
+        element={
+          !isAuthenticated ? (
+            <Login onLogin={onLogin} />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
       />
 
-      <Route 
-        path="/login" 
+      <Route
+        path="/signup"
         element={
-          !isAuthenticated ? 
-            <Login onLogin={onLogin} /> : 
-            <Navigate to={userRole === 'seller' ? '/updatelisting' : '/'} />
-        } 
+          !isAuthenticated ? (
+            <SignUpPage onLogin={onLogin} />
+          ) : (
+            <Navigate to="/" />
+          )
+        }
       />
 
-      <Route 
-        path="/signup" 
-        element={
-          !isAuthenticated ? 
-            <SignUpPage onLogin={onLogin} /> : 
-            <Navigate to={userRole === 'seller' ? '/updatelisting' : '/'} />
-        } 
-      />
-      
-      {/* <Route 
-        path="/forgot-password" 
-        element={<ForgotPassword />} 
-      />
-      
-      <Route 
-        path="/verify-otp" 
-        element={<VerifyOTP />} 
-      />
-      
-      <Route 
-        path="/reset-password" 
-        element={<ResetPassword />} 
-      /> */}
-      
       {/* Protected Routes */}
-      <Route 
-        path="/updatelisting" 
+      <Route
+        path="/profile"
         element={
-          isAuthenticated && userRole === 'seller' ? 
-            <CreateListing /> : 
+          isAuthenticated ? (
+            <Profile userRole={userRole} onLogout={onLogout} />
+          ) : (
+            <Navigate to="/login" />
+          )
+        }
+      />
+
+      {/* Seller Only Routes */}
+      <Route
+        path="/create-listing"
+        element={
+          isAuthenticated && userRole === 'seller' ? (
+            <CreateListing />
+          ) : isAuthenticated ? (
+            <Navigate to="/signup?role=seller" />
+          ) : (
             <Navigate to="/login?role=seller" />
-        } 
+          )
+        }
       />
-      
-      <Route 
-        path="/listings" 
+
+      <Route
+        path="/listings"
         element={
-          isAuthenticated ? 
-            <ListingsPage /> : 
-            <Navigate to="/login" />
-        } 
+          isAuthenticated && userRole === 'seller' ? (
+            <ListingsPage />
+          ) : isAuthenticated ? (
+            <Navigate to="/" />
+          ) : (
+            <Navigate to="/login?role=seller" />
+          )
+        }
       />
-      
-      <Route 
-        path="/edit/:id" 
+
+      <Route
+        path="/edit/:id"
         element={
-          isAuthenticated ? 
-            <EditListing /> : 
-            <Navigate to="/login" />
-        } 
+          isAuthenticated && userRole === 'seller' ? (
+            <EditListing />
+          ) : isAuthenticated ? (
+            <Navigate to="/" />
+          ) : (
+            <Navigate to="/login?role=seller" />
+          )
+        }
       />
-      <Route path="/listing/:id" element={<ListingDetailsPage />} />
-      {/* Listings page (public) */}
-      <Route path="/properties" element={<Listings />} />
-      
+
       {/* Catch all route */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

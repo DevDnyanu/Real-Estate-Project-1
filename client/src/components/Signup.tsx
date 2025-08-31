@@ -1,12 +1,14 @@
-// components/SignUpPage.jsx
+// components/SignUpPage.tsx
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, UserCheck, Store } from 'lucide-react';
+import { signupApi } from '@/lib/api';
 
 // Define the form data interface
 interface FormData {
@@ -26,7 +28,11 @@ interface FormErrors {
   confirmPassword?: string;
 }
 
-const SignUpPage = ({ onLogin }) => {
+interface SignUpPageProps {
+  onLogin: (token: string, role: string, userId: string) => void;
+}
+
+const SignUpPage: React.FC<SignUpPageProps> = ({ onLogin }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
@@ -112,26 +118,52 @@ const SignUpPage = ({ onLogin }) => {
     }
 
     setIsLoading(true);
-    
-    // Simulate API call with timeout
-    setTimeout(() => {
-      const mockToken = `mock-${activeTab}-token-${Math.floor(Math.random() * 1000)}`;
+
+    try {
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+        role: activeTab
+      };
+
+      const response = await signupApi(userData);
       
-      onLogin(mockToken, activeTab);
-      toast({
-        title: "Success",
-        description: "Account created successfully!",
-      });
-      
-      // Redirect based on role
-      if (activeTab === 'seller') {
-        navigate('/updatelisting');
-      } else {
-        navigate('/');
+      if (response.status === 'success') {
+        toast({
+          title: "Success",
+          description: "Account created successfully! Please log in.",
+        });
+        
+        // Redirect to login page without pre-filling email
+        navigate(`/login?signedup=true&role=${activeTab}`);
       }
-      
+    } catch (error: any) {
+      // Handle validation errors from backend
+      if (error.errors) {
+        // Set the validation errors from backend
+        const backendErrors: FormErrors = {};
+        Object.keys(error.errors).forEach(key => {
+          backendErrors[key as keyof FormErrors] = error.errors[key];
+        });
+        setErrors(backendErrors);
+        
+        toast({
+          title: "Validation Error",
+          description: "Please fix the errors in the form",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Signup Failed",
+          description: error.message || "Failed to create account",
+          variant: "destructive"
+        });
+      }
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const togglePasswordVisibility = () => {
@@ -143,131 +175,147 @@ const SignUpPage = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
-        <h2 className="text-2xl font-semibold mb-6 text-center">Sign Up</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 px-4 py-12">
+      <Card className="w-full max-w-md shadow-card relative">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="absolute top-4 left-4"
+          onClick={() => navigate(-1)}
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="buyer">Buyer</TabsTrigger>
-            <TabsTrigger value="seller">Seller</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <CardHeader className="text-center pt-12">
+          <CardTitle className="text-2xl font-heading">Create Account</CardTitle>
+          <CardDescription>
+            Sign up to get started
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="buyer" className="flex items-center space-x-2">
+                <UserCheck className="h-4 w-4" />
+                <span>Buyer</span>
+              </TabsTrigger>
+              <TabsTrigger value="seller" className="flex items-center space-x-2">
+                <Store className="h-4 w-4" />
+                <span>Seller</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              name="name"
-              type="text"
-              placeholder="Enter your full name"
-              value={formData.name}
-              onChange={handleChange}
-              className={errors.name ? 'border-red-500' : ''}
-            />
-            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="Enter your email"
-              value={formData.email}
-              onChange={handleChange}
-              className={errors.email ? 'border-red-500' : ''}
-            />
-            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone Number</Label>
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              placeholder="Enter your 10-digit phone number"
-              value={formData.phone}
-              onChange={handleChange}
-              className={errors.phone ? 'border-red-500' : ''}
-            />
-            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <div className="relative">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Full Name</Label>
               <Input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Enter at least 8 characters"
-                value={formData.password}
+                id="name"
+                name="name"
+                type="text"
+                placeholder="Enter your full name"
+                value={formData.name}
                 onChange={handleChange}
-                className={errors.password ? 'border-red-500 pr-10' : 'pr-10'}
+                className={errors.name ? 'border-destructive' : ''}
               />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                onClick={togglePasswordVisibility}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-500" />
-                ) : (
-                  <Eye className="h-4 w-4 text-gray-500" />
-                )}
-              </button>
+              {errors.name && <p className="text-destructive text-xs mt-1">{errors.name}</p>}
             </div>
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <div className="relative">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="Confirm your password"
-                value={formData.confirmPassword}
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Enter your email"
+                value={formData.email}
                 onChange={handleChange}
-                className={errors.confirmPassword ? 'border-red-500 pr-10' : 'pr-10'}
+                className={errors.email ? 'border-destructive' : ''}
               />
-              <button
-                type="button"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                onClick={toggleConfirmPasswordVisibility}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-500" />
-                ) : (
-                  <Eye className="h-4 w-4 text-gray-500" />
-                )}
-              </button>
+              {errors.email && <p className="text-destructive text-xs mt-1">{errors.email}</p>}
             </div>
-            {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
-          </div>
 
-          <Button type="submit" className="w-full mt-6" disabled={isLoading}>
-            {isLoading ? 'Creating Account...' : `Sign Up as ${activeTab === 'buyer' ? 'Buyer' : 'Seller'}`}
-          </Button>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                placeholder="Enter your 10-digit phone number"
+                value={formData.phone}
+                onChange={handleChange}
+                className={errors.phone ? 'border-destructive' : ''}
+              />
+              {errors.phone && <p className="text-destructive text-xs mt-1">{errors.phone}</p>}
+            </div>
 
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter at least 8 characters"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={togglePasswordVisibility}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              {errors.password && <p className="text-destructive text-xs mt-1">{errors.password}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className={errors.confirmPassword ? 'border-destructive pr-10' : 'pr-10'}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={toggleConfirmPasswordVisibility}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              {errors.confirmPassword && <p className="text-destructive text-xs mt-1">{errors.confirmPassword}</p>}
+            </div>
+
+            <Button type="submit" className="w-full mt-6" disabled={isLoading}>
+              {isLoading ? 'Creating Account...' : `Sign Up as ${activeTab === 'buyer' ? 'Buyer' : 'Seller'}`}
+            </Button>
+          </form>
+        </CardContent>
+
+        <CardFooter className="flex flex-col space-y-4">
+          <p className="text-sm text-muted-foreground text-center">
             Already have an account?{' '}
-            <button 
-              onClick={() => navigate('/login')}
-              className="text-primary hover:underline font-medium"
-            >
+            <Link to="/login" className="text-primary hover:underline font-medium">
               Login
-            </button>
+            </Link>
           </p>
-        </div>
-      </div>
+        </CardFooter>
+      </Card>
     </div>
   );
 };

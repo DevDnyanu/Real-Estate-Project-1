@@ -1,4 +1,4 @@
-// components/Login.jsx
+// components/Login.tsx
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { UserCheck, Store, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { loginApi } from '@/lib/api';
 
 // Define TypeScript interfaces
 interface LoginProps {
-  onLogin: (token: string, role: UserRole) => void;
+  onLogin: (token: string, role: string, userId: string) => void;
 }
 
 interface FormData {
@@ -22,16 +23,6 @@ interface FormData {
 interface FormErrors {
   email?: string;
   password?: string;
-}
-
-interface MockUser {
-  email: string;
-  password: string;
-  token: string;
-  user: {
-    name: string;
-    role: UserRole;
-  };
 }
 
 type UserRole = 'buyer' | 'seller';
@@ -46,6 +37,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
   
+  // Check if user just signed up
+  const justSignedUp = searchParams.get('signedup') === 'true';
+  
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: ''
@@ -56,6 +50,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [activeRole, setActiveRole] = useState<UserRole>(
     (searchParams.get('role') as UserRole) || 'buyer'
   );
+
+  // Show welcome message if user just signed up
+  React.useEffect(() => {
+    if (justSignedUp) {
+      toast({
+        title: "Account Created Successfully",
+        description: "Please log in with your credentials",
+      });
+    }
+  }, [justSignedUp, toast]);
 
   // Handle tab change with type safety
   const handleTabChange = (value: string) => {
@@ -95,57 +99,41 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Mock user data for testing
-  const mockUsers: Record<UserRole, MockUser> = {
-    buyer: {
-      email: 'buyer@example.com',
-      password: 'password123',
-      token: 'mock-buyer-token-123',
-      user: { name: 'John Buyer', role: 'buyer' }
-    },
-    seller: {
-      email: 'seller@example.com',
-      password: 'password123',
-      token: 'mock-seller-token-456',
-      user: { name: 'Jane Seller', role: 'seller' }
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent, role: UserRole) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
-    
-    // Simulate API call with timeout
-    setTimeout(() => {
-      const mockUser = mockUsers[role];
+
+    try {
+      const response = await loginApi(formData.email, formData.password, role);
       
-      if (formData.email === mockUser.email && formData.password === mockUser.password) {
-        onLogin(mockUser.token, mockUser.user.role);
+      if (response.status === 'success') {
+        onLogin(response.token, response.data.user.role, response.data.user.id);
         toast({
           title: "Success",
-          description: `Welcome! Logged in as ${mockUser.user.name}`,
+          description: `Welcome! Logged in as ${response.data.user.name}`,
         });
-        
+
         // Redirect based on role
-        if (mockUser.user.role === 'seller') {
-          navigate('/updatelisting');
+        if (response.data.user.role === 'seller') {
+          navigate('/listings');
         } else {
           navigate('/');
         }
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid email or password",
-          variant: "destructive"
-        });
       }
+    } catch (error: any) {
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid email or password",
+        variant: "destructive"
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,9 +160,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </Button>
         
         <CardHeader className="text-center pt-12">
-          <CardTitle className="text-2xl font-heading">Welcome Back</CardTitle>
+          <CardTitle className="text-2xl font-heading">
+            {justSignedUp ? "Account Created Successfully" : "Welcome Back"}
+          </CardTitle>
           <CardDescription>
-            Sign in to your account to continue
+            {justSignedUp ? "Please log in to continue" : "Sign in to your account to continue"}
           </CardDescription>
         </CardHeader>
         
@@ -230,9 +220,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </Button>
                   </div>
                   {errors.password && <p className="text-destructive text-xs mt-1">{errors.password}</p>}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Demo: buyer@example.com / password123
-                  </p>
                 </div>
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? 'Signing in...' : 'Login as Buyer'}
@@ -278,9 +265,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </Button>
                   </div>
                   {errors.password && <p className="text-destructive text-xs mt-1">{errors.password}</p>}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Demo: seller@example.com / password123
-                  </p>
                 </div>
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading ? 'Signing in...' : 'Login as Seller'}
@@ -303,14 +287,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               Sign up
             </Link>
           </p>
-          
-          {/* <div className="bg-muted p-4 rounded-lg">
-            <h4 className="text-sm font-medium mb-2">Test Credentials:</h4>
-            <div className="text-xs space-y-1">
-              <p><strong>Buyer:</strong> buyer@example.com / password123</p>
-              <p><strong>Seller:</strong> seller@example.com / password123</p>
-            </div>
-          </div> */}
         </CardFooter>
       </Card>
     </div>

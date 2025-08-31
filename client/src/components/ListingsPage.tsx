@@ -39,13 +39,13 @@ const ListingsPage = () => {
       const data = await deleteListingApi(id);
       if (data?.success) {
         setListings((prev) => prev.filter((x) => x._id !== id));
-        alert("Listing deleted successfully ✅");
+        alert("Listing deleted successfully ");
       } else {
-        alert("Failed to delete listing ❌");
+        alert("Failed to delete listing ");
       }
     } catch (err) {
       console.error("Error deleting listing:", err);
-      alert("Failed to delete listing ❌");
+      alert("Failed to delete listing ");
     }
   };
 
@@ -83,7 +83,7 @@ const ListingsPage = () => {
     <main className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Listings</h1>
+          {/* <h1 className="text-3xl font-bold text-gray-900 mb-2">My Listings</h1> */}
           <p className="text-gray-600">Manage your property listings</p>
         </div>
 

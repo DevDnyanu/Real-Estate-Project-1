@@ -1,4 +1,6 @@
+// components/Listings.tsx
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PropertyCard from '@/components/PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +12,7 @@ const Listings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchListings = async () => {
@@ -133,7 +136,7 @@ const Listings = () => {
                     featured: listing.offer,
                     verified: true,
                   }}
-                  onView={() => window.location.href = `/listing/${listing._id}`}
+                  onView={() => navigate(`/listing/${listing._id}`)}
                   onContact={() => console.log('Contact seller:', listing._id)}
                   onFavorite={() => console.log('Add to favorites:', listing._id)}
                 />

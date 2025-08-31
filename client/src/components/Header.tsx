@@ -1,7 +1,7 @@
 // components/Header.tsx
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Home, Globe, User, LogOut } from 'lucide-react';
+import { Home, Globe, User, LogOut, Building2, Search } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface HeaderProps {
@@ -21,7 +21,9 @@ const translations = {
     login: 'Login',
     signup: 'Sign Up',
     profile: 'My Profile',
-    logout: 'Logout'
+    logout: 'Logout',
+    myListings: 'My Listings',
+    browse: 'Browse Properties'
   },
   hi: {
     brand: 'फाइंडईज',
@@ -31,7 +33,9 @@ const translations = {
     login: 'लॉगिन',
     signup: 'साइन अप',
     profile: 'मेरी प्रोफाइल',
-    logout: 'लॉगआउट'
+    logout: 'लॉगआउट',
+    myListings: 'मेरी लिस्टिंग्स',
+    browse: 'संपत्तियां देखें'
   }
 };
 
@@ -45,13 +49,31 @@ const Header = ({
   const navigate = useNavigate();
   const t = translations[currentLang];
 
+  const handleBuyClick = () => {
+    if (isLoggedIn && userRole !== 'seller') {
+      navigate('/properties');
+    } else if (!isLoggedIn) {
+      navigate('/signup?role=buyer');
+    } else {
+      navigate('/properties');
+    }
+  };
+
   const handleSellClick = () => {
     if (isLoggedIn && userRole === 'seller') {
-      navigate('/updatelisting');
-    } else if (isLoggedIn && userRole !== 'seller') {
+      navigate('/create-listing');
+    } else if (!isLoggedIn) {
       navigate('/signup?role=seller');
     } else {
       navigate('/signup?role=seller');
+    }
+  };
+
+  const handleHomeClick = () => {
+    if (isLoggedIn && userRole === 'seller') {
+      navigate('/listings');
+    } else {
+      navigate('/');
     }
   };
 
@@ -60,7 +82,7 @@ const Header = ({
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           {/* Left Side - Logo */}
-          <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>
+          <div className="flex items-center cursor-pointer" onClick={handleHomeClick}>
             <Home className="h-8 w-8 text-primary" />
             <h1 className="text-2xl font-bold font-heading text-primary ml-2">{t.brand}</h1>
           </div>
@@ -70,24 +92,33 @@ const Header = ({
             <Button 
               variant="ghost" 
               className="text-foreground hover:text-primary font-bold text-base"
-              onClick={() => navigate('/')}
+              onClick={handleHomeClick}
             >
-              {t.home}
+              {userRole === 'seller' ? t.myListings : t.home}
             </Button>
-            <Button 
-              variant="ghost" 
-              className="text-foreground hover:text-primary font-bold text-base"
-              onClick={() => navigate('/')}
-            >
-              {t.buy}
-            </Button>
-            <Button 
-              variant="ghost" 
-              className="text-foreground hover:text-primary font-bold text-base"
-              onClick={handleSellClick}
-            >
-              {t.sell}
-            </Button>
+            
+            {userRole !== 'seller' && (
+              <Button 
+                variant="ghost" 
+                className="text-foreground hover:text-primary font-bold text-base"
+                onClick={handleBuyClick}
+              >
+                <Search className="h-4 w-4 mr-1" />
+                {t.buy}
+              </Button>
+            )}
+            
+            {/* Only show Sell button to sellers or non-logged in users */}
+            {(userRole === 'seller' || !isLoggedIn) && (
+              <Button 
+                variant="ghost" 
+                className="text-foreground hover:text-primary font-bold text-base"
+                onClick={handleSellClick}
+              >
+                <Building2 className="h-4 w-4 mr-1" />
+                {t.sell}
+              </Button>
+            )}
           </nav>
 
           {/* Right Side - Auth & Language */}

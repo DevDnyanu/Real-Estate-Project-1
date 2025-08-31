@@ -13,7 +13,6 @@ interface HeroProps {
 const translations = {
   en: {
     title: 'Find Your Dream Property in Pune',
-    subtitle: 'Discover the best residential properties for buy, sell, and rent',
     searchPlaceholder: 'Search by location, property type...',
     buyTab: 'Buy',
     sellTab: 'Sell',
@@ -41,7 +40,6 @@ const translations = {
   },
   hi: {
     title: 'पुणे में अपनी सपनों की संपत्ति खोजें',
-    subtitle: 'खरीदने, बेचने और किराए के लिए सर्वोत्तम आवासीय संपत्तियों की खोज करें',
     searchPlaceholder: 'स्थान, संपत्ति प्रकार से खोजें...',
     buyTab: 'खरीदें',
     sellTab: 'बेचें',
@@ -97,34 +95,11 @@ export const Hero = ({ currentLang }: HeroProps) => {
           <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 font-heading">
             {t.title}
           </h1>
-          <p className="text-xl md:text-2xl text-white/90 mb-12 font-body">
-            {t.subtitle}
-          </p>
+          
 
           {/* Search Card */}
           <Card className="p-6 bg-white/95 backdrop-blur-sm shadow-elevated">
-            {/* Tabs */}
-            <div className="flex justify-center mb-6">
-              <div className="flex bg-muted rounded-lg p-1">
-                {['buy', 'sell', 'rent'].map((tab) => (
-                  <Button
-                    key={tab}
-                    variant={activeTab === tab ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-6 py-2 ${
-                      activeTab === tab 
-                        ? 'bg-gradient-hero text-primary-foreground shadow-sm' 
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {tab === 'buy' && t.buyTab}
-                    {tab === 'sell' && t.sellTab}
-                    {tab === 'rent' && t.rentTab}
-                  </Button>
-                ))}
-              </div>
-            </div>
+            
 
             {/* Search Form */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">

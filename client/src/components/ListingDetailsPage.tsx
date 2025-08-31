@@ -1,4 +1,4 @@
-// src/pages/ListingDetailsPage.tsx
+// components/ListingDetailsPage.tsx
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,10 @@ import {
   ArrowLeft,
   Calendar,
   User,
-  Verified
+  Verified,
+  ChevronLeft,
+  ChevronRight,
+  ImageIcon
 } from "lucide-react";
 import { getListingApi } from "@/lib/api";
 
@@ -28,6 +31,7 @@ const ListingDetailsPage = () => {
   const [listing, setListing] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,6 +55,22 @@ const ListingDetailsPage = () => {
 
     fetchListing();
   }, [id]);
+
+  const nextImage = () => {
+    if (listing.images && listing.images.length > 0) {
+      setCurrentImageIndex((prevIndex) => 
+        prevIndex === listing.images.length - 1 ? 0 : prevIndex + 1
+      );
+    }
+  };
+
+  const prevImage = () => {
+    if (listing.images && listing.images.length > 0) {
+      setCurrentImageIndex((prevIndex) => 
+        prevIndex === 0 ? listing.images.length - 1 : prevIndex - 1
+      );
+    }
+  };
 
   if (loading) return <div className="p-8 text-center">Loading property details...</div>;
   if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>;
@@ -100,27 +120,75 @@ const ListingDetailsPage = () => {
           <span>{listing.address}</span>
         </div>
 
-        {/* Main Image */}
-        <div className="mb-8">
-          <img
-            src={listing.images?.[0] || "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800"}
-            alt={listing.name}
-            className="w-full h-96 object-cover rounded-lg shadow-md"
-          />
+        {/* Main Image with Carousel */}
+        <div className="mb-8 relative">
+          {listing.images && listing.images.length > 0 ? (
+            <div className="relative group">
+              <img
+                src={listing.images[currentImageIndex]}
+                alt={listing.name}
+                className="w-full h-96 object-cover rounded-lg shadow-md"
+              />
+              
+              {/* Navigation Arrows */}
+              {listing.images.length > 1 && (
+                <>
+                  <button
+                    onClick={prevImage}
+                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </button>
+                  
+                  <button
+                    onClick={nextImage}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
+                </>
+              )}
+              
+              {/* Image Counter */}
+              {listing.images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded-full text-sm">
+                  {currentImageIndex + 1} / {listing.images.length}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="w-full h-96 bg-gray-200 rounded-lg flex flex-col items-center justify-center">
+              <ImageIcon className="h-16 w-16 text-gray-400 mb-4" />
+              <p className="text-gray-500">No images available</p>
+            </div>
+          )}
         </div>
 
-        {/* Additional Images */}
+        {/* Image Thumbnails */}
         {listing.images && listing.images.length > 1 && (
           <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">More Images</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {listing.images.slice(1).map((image: string, index: number) => (
-                <img
-                  key={index}
-                  src={image}
-                  alt={`${listing.name} ${index + 2}`}
-                  className="w-full h-48 object-cover rounded-lg shadow-md"
-                />
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <ImageIcon className="h-5 w-5" />
+              All Images ({listing.images.length})
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {listing.images.map((image: string, index: number) => (
+                <div 
+                  key={index} 
+                  className={`relative cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${
+                    index === currentImageIndex ? 'border-blue-500' : 'border-gray-200'
+                  }`}
+                  onClick={() => setCurrentImageIndex(index)}
+                >
+                  <img
+                    src={image}
+                    alt={`${listing.name} ${index + 1}`}
+                    className="w-full h-24 object-cover"
+                  />
+                  <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 rounded">
+                    {index + 1}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -319,6 +387,11 @@ const ListingDetailsPage = () => {
                 <div className="flex justify-between items-center py-2 border-b">
                   <span className="text-gray-600">Listing Type:</span>
                   <span className="font-medium capitalize">{listing.type || 'sale'}</span>
+                </div>
+                
+                <div className="flex justify between items-center py-2 border-b">
+                  <span className="text-gray-600">Total Images:</span>
+                  <span className="font-medium">{listing.images?.length || 0}</span>
                 </div>
                 
                 <div className="flex justify-between items-center py-2 border-b">

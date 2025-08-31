@@ -25,8 +25,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 
-// Main Create/Edit Listing Component
-const ListingForm = ({ mode = 'create' }) => {
+const EditListing = () => {
   const { id } = useParams();
   const [files, setFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
@@ -68,18 +67,26 @@ const ListingForm = ({ mode = 'create' }) => {
   const [loading, setLoading] = useState(false);
   const [listingId, setListingId] = useState<string | null>(null);
   const [textDataSubmitted, setTextDataSubmitted] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Fetch listing data when in edit mode
- // ListingForm component में मौजूदा useEffect को इससे replace करें
-useEffect(() => {
-  if (mode === 'edit' && id) {
+  // Fetch listing data when component mounts
+  useEffect(() => {
     const fetchListing = async () => {
+      if (!id) {
+        toast({
+          title: 'Error',
+          description: 'No listing ID provided',
+          variant: 'destructive'
+        });
+        navigate('/listings');
+        return;
+      }
+      
       try {
-        setLoading(true);
+        setIsFetching(true);
         const listingData = await getListingApi(id);
-        console.log('Fetched listing data:', listingData); // Debug के लिए
         
         if (listingData) {
           setFormData({
@@ -111,13 +118,12 @@ useEffect(() => {
         });
         navigate('/listings');
       } finally {
-        setLoading(false);
+        setIsFetching(false);
       }
     };
     
     fetchListing();
-  }
-}, [mode, id, toast, navigate]);
+  }, [id, toast, navigate]);
 
   // Validation functions
   const validateName = (name: string) => {
@@ -168,7 +174,7 @@ useEffect(() => {
   };
 
   const validateDiscountPrice = (discountPrice: number, regularPrice: number) => {
-    if (discountPrice >= regularPrice) return 'Discount price must be less than regular price';
+    if (discountPrice > 0 && discountPrice >= regularPrice) return 'Discount price must be less than regular price';
     return validatePrice(discountPrice, true);
   };
 
@@ -226,7 +232,18 @@ useEffect(() => {
     }
     
     if (['parking', 'furnished', 'offer'].includes(id)) {
-      setFormData({ ...formData, [id]: (e.target as HTMLInputElement).checked });
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData({ 
+        ...formData, 
+        [id]: checked,
+        // Reset discount price if offer is unchecked
+        ...(id === 'offer' && !checked ? { discountPrice: 0 } : {})
+      });
+      
+      // Clear discount price error if offer is unchecked
+      if (id === 'offer' && !checked) {
+        setErrors({ ...errors, discountPrice: '' });
+      }
       return;
     }
     
@@ -271,6 +288,8 @@ useEffect(() => {
       newValue = Math.max(1000000, Math.min(20000000, newValue));
     } else if (field === 'squareFootage') {
       newValue = Math.max(500, Math.min(10000, newValue));
+    } else if (field === 'discountPrice') {
+      newValue = Math.max(0, Math.min(formData.regularPrice - 1, newValue));
     }
     
     setFormData({
@@ -319,9 +338,10 @@ useEffect(() => {
       setUploading(true);
       
       // First delete marked images if any
-      if (imagesToDelete.length > 0 && mode === 'edit') {
+      if (imagesToDelete.length > 0) {
         // You would need to implement an API endpoint for deleting images
         // await deleteImagesApi(listingId, imagesToDelete);
+        console.log('Images to delete:', imagesToDelete);
       }
       
       // Then upload new images
@@ -331,7 +351,7 @@ useEffect(() => {
       
       toast({ 
         title: 'Success', 
-        description: mode === 'create' ? 'Listing created successfully!' : 'Listing updated successfully!',
+        description: 'Listing updated successfully!',
         variant: 'default'
       });
       
@@ -366,35 +386,31 @@ useEffect(() => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  if (!validateForm()) {
-    setSubmitError('Please fix the errors in the form');
-    return;
-  }
-  
-  try {
-    setLoading(true);
-    setSubmitError('');
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      setSubmitError('Please fix the errors in the form');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setSubmitError('');
 
-    let data;
-    if (mode === 'create') {
-      data = await createListingApi(formData);
-      setListingId(data.listingId);
-      setTextDataSubmitted(true);
-      
-      toast({ 
-        title: 'Success', 
-        description: 'Listing created successfully! Please upload images.',
-        variant: 'default'
-      });
-    } else {
-      // Update existing listing - FIXED: Use the correct ID
       if (!id) {
         throw new Error('Listing ID is required for update');
       }
       
-      data = await updateListingApi(id, formData);
+      // Prepare data for submission - ensure discountPrice is 0 if offer is false
+      // Also ensure discountPrice is valid
+      const submissionData = {
+        ...formData,
+        discountPrice: formData.offer && formData.discountPrice > 0 && formData.discountPrice < formData.regularPrice 
+          ? formData.discountPrice 
+          : 0
+      };
+      
+      await updateListingApi(id, submissionData);
       setListingId(id);
       setTextDataSubmitted(true);
       
@@ -403,14 +419,23 @@ useEffect(() => {
         description: 'Listing updated successfully! You can now update images.',
         variant: 'default'
       });
+    } catch (e: any) {
+      console.error('Error updating listing:', e);
+      
+      // Handle specific validation errors from the server
+      if (e.message && e.message.includes('discountPrice')) {
+        setErrors({
+          ...errors,
+          discountPrice: 'Discount price must be less than regular price'
+        });
+        setSubmitError('Please fix the discount price validation error');
+      } else {
+        setSubmitError(e.message || 'Something went wrong. Please try again.');
+      }
+    } finally {
+      setLoading(false);
     }
-  } catch (e: any) {
-    console.error('Error creating/updating listing:', e);
-    setSubmitError(e.message || 'Something went wrong. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Handle delete listing
   const handleDeleteListing = async () => {
@@ -475,7 +500,7 @@ useEffect(() => {
     });
   };
 
-  if (loading && mode === 'edit') {
+  if (isFetching) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 flex items-center justify-center">
         <div className="text-center">
@@ -505,25 +530,19 @@ useEffect(() => {
               <div className="p-2 bg-blue-600 rounded-lg">
                 <Home className="h-5 w-5 text-white" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {mode === 'create' ? 'Create Property Listing' : 'Edit Property Listing'}
-              </h1>
+              <h1 className="text-2xl font-bold text-gray-900">Edit Property Listing</h1>
             </div>
-            <p className="text-sm text-gray-600">
-              {mode === 'create' ? 'Fill in the details to create your property listing' : 'Update your property listing details'}
-            </p>
+            <p className="text-sm text-gray-600">Update your property listing details</p>
           </div>
           
-          {mode === 'edit' && (
-            <Button 
-              variant="destructive" 
-              onClick={handleDeleteListing}
-              className="flex items-center gap-1"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-          )}
+          <Button 
+            variant="destructive" 
+            onClick={handleDeleteListing}
+            className="flex items-center gap-1"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </Button>
         </div>
 
         {!textDataSubmitted ? (
@@ -943,16 +962,38 @@ useEffect(() => {
                       <Label htmlFor="discountPrice" className="text-sm font-medium text-gray-700">
                         Discount Price <span className="text-red-500">*</span>
                       </Label>
-                      <div className="relative">
-                        <Input
-                          type="text"
-                          id="discountPrice"
-                          required
-                          className="h-9 text-sm pl-6"
-                          onChange={(e) => handlePriceChange(e, 'discountPrice')}
-                          value={formatPrice(formData.discountPrice)}
-                        />
-                        <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                      <div className="flex items-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 rounded-r-none"
+                          onClick={() => handleNumberChange('discountPrice', false)}
+                          disabled={formData.discountPrice <= 0}
+                        >
+                          -
+                        </Button>
+                        <div className="relative flex-1">
+                          <Input
+                            type="text"
+                            id="discountPrice"
+                            required
+                            className="h-9 text-sm pl-6 rounded-none border-l-0 border-r-0"
+                            onChange={(e) => handlePriceChange(e, 'discountPrice')}
+                            value={formatPrice(formData.discountPrice)}
+                          />
+                          <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 w-9 rounded-l-none"
+                          onClick={() => handleNumberChange('discountPrice', true)}
+                          disabled={formData.discountPrice >= formData.regularPrice - 1}
+                        >
+                          +
+                        </Button>
                       </div>
                       <p className="text-xs text-gray-500">
                         {formData.type === 'rent' ? 'Per month' : 'Total price'}
@@ -998,12 +1039,12 @@ useEffect(() => {
                     {loading ? (
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        {mode === 'create' ? 'Creating...' : 'Updating...'}
+                        Updating...
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <Save className="h-4 w-4" />
-                        {mode === 'create' ? 'Create Property Listing' : 'Update Property Listing'}
+                        Update Property Listing
                       </div>
                     )}
                   </Button>
@@ -1017,12 +1058,12 @@ useEffect(() => {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Upload className="h-4 w-4 text-blue-600" />
-                {mode === 'create' ? 'Upload Property Images' : 'Update Property Images'}
+                Update Property Images
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Existing Images (only in edit mode) */}
-              {mode === 'edit' && existingImages.length > 0 && (
+              {/* Existing Images */}
+              {existingImages.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-700">
                     Existing Images
@@ -1068,7 +1109,7 @@ useEffect(() => {
               {/* New Image Upload */}
               <div className="space-y-2">
                 <Label htmlFor="images" className="text-sm font-medium text-gray-700">
-                  {mode === 'create' ? 'Select Images (Max 6)' : 'Add More Images'} <span className="text-red-500">*</span>
+                  Add More Images <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="images"
@@ -1122,10 +1163,10 @@ useEffect(() => {
                   {uploading ? (
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {mode === 'create' ? 'Uploading...' : 'Updating...'}
+                      Updating...
                     </div>
                   ) : (
-                    mode === 'create' ? 'Upload Images' : 'Update Images'
+                    'Update Images'
                   )}
                 </Button>
                 
@@ -1135,7 +1176,7 @@ useEffect(() => {
                   onClick={() => navigate(`/listing/${listingId}`)}
                   className="h-10 text-sm"
                 >
-                  {mode === 'create' ? 'Skip for Now' : 'Done'}
+                  Done
                 </Button>
               </div>
             </CardContent>
@@ -1146,4 +1187,4 @@ useEffect(() => {
   );
 };
 
-export default ListingForm;
+export default EditListing;
